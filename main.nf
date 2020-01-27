@@ -881,7 +881,7 @@ singleBamSentieon = singleBamSentieon.dump(tag:'Single BAM')
 multipleBam = multipleBam.mix(multipleBamSentieon)
 
 process MergeBamMapped {
-    label 'med_resources'
+    label 'cpus_4'
 
     tag {idPatient + "-" + idSample}
 
@@ -910,7 +910,7 @@ mergedBam = mergedBam.dump(tag:'BAMs for MD')
 mergedBamForSentieon = mergedBamForSentieon.dump(tag:'Sentieon BAMs to Index')
 
 process IndexBamMergedForSentieon {
-    label 'med_resources'
+    label 'cpus_4'
 
     tag {idPatient + "-" + idSample}
 
@@ -929,7 +929,7 @@ process IndexBamMergedForSentieon {
 (mergedBam, mergedBamToIndex) = mergedBam.into(2)
 
 process IndexBamFile {
-    label 'med_resources'
+    label 'cpus_4'
 
     tag {idPatient + "-" + idSample}
 
@@ -1365,7 +1365,7 @@ process RunGenomeChronicler {
 // STEP 4.5': INDEXING THE RECALIBRATED BAM FILES
 
 process IndexBamRecal {
-    label 'med_resources'
+    label 'cpus_4'
 
     tag {idPatient + "-" + idSample}
 
@@ -1443,7 +1443,7 @@ samtoolsStatsReport = samtoolsStatsReport.dump(tag:'SAMTools')
 bamBamQC = bamMappedBamQC.mix(bamRecalBamQC)
 
 process BamQC {
-    label 'med_resources'
+    label 'cpus_4'
 
     tag {idPatient + "-" + idSample}
 
@@ -2915,7 +2915,7 @@ compressVCFsnpEffOut = compressVCFsnpEffOut.dump(tag:'VCF')
 
 process VEP {
     label 'VEP'
-    label 'med_resources'
+    label 'cpus_4'
 
     echo true
     tag {"${idSample} - ${variantCaller} - ${vcf}"}
@@ -2981,7 +2981,7 @@ vepReport = vepReport.dump(tag:'VEP')
 
 process VEPmerge {
     label 'VEP'
-    label 'med_resources'
+    label 'cpus_4'
 
     tag {"${idSample} - ${variantCaller} - ${vcf}"}
 
