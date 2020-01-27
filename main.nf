@@ -1341,7 +1341,7 @@ process RunGenomeChronicler {
 
   input:
   file(bam) from bamGenomeChronicler
-  each file(vep) from vepReportPGPUK
+  file(vep) from vepReportForGenomeChronicler
 
   output:
   file("results_${bam.simpleName}") into chronicler_results
