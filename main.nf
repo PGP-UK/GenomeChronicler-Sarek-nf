@@ -2940,7 +2940,7 @@ process VEP {
 
     output:
         set variantCaller, idSample, file("${reducedVCF}_VEP.ann.vcf") into vepVCF
-        file("${reducedVCF}_VEP.summary.html") into (vepReport, vepReportForGenomeChronicler)
+        file("${reducedVCF}_VEP.summary.html") into vepReport
 
     when: 'vep' in tools
 
@@ -3040,6 +3040,8 @@ process VEPmerge {
 }
 
 vepReportMerge = vepReportMerge.dump(tag:'VEP')
+(vepReportForGenomeChronicler , vepReportForGenomeChronicler_inspect) = vepReport.into(2)
+vepReportForGenomeChronicler_inspect.view()
 
 vcfCompressVCFvep = vepVCF.mix(vepVCFmerge)
 
