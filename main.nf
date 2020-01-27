@@ -1329,13 +1329,6 @@ Channel.fromPath(params.vepFile)
        .ifEmpty { exit 1, "--vepFile not specified or no file found at that destination with the suffix .html. Please make sure to provide the file path correctly}" }
        .set { vepGenomeChronicler }
 
-if ('vep' in tools) {
-    vepReportPGPUK = vepReportForGenomeChronicler.into(1)
-}
-else {
-    vepReportPGPUK = vepGenomeChronicler.into(1)
-}
-
 // STEP 4.5.2: RUNNING GenomeChronicler FOR THE RECALIBRATED BAM FILES
 // TODO: Update this when there is a different VEP html report for each bam
 process RunGenomeChronicler {
