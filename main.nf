@@ -2685,7 +2685,7 @@ controlFreecVizOut.dump(tag:'ControlFreecViz')
 
 vcfKeep = Channel.empty().mix(
     vcfConcatenatedForVEP.map {
-        variantCaller, idPatient, idSample, vcf, tbi ->
+        variantcaller, idPatient, idSample, vcf, tbi ->
         [variantcaller, idSample, vcf]
     },
     vcfSentieon.map {
