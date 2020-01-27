@@ -2673,18 +2673,21 @@ controlFreecVizOut.dump(tag:'ControlFreecViz')
 (vcfStrelkaBPIndels, vcfStrelkaBPSNVS) = vcfStrelkaBP.into(2)
 (vcfMantaSomaticSV, vcfMantaDiploidSV) = vcfManta.into(2)
 
-if (params.noGVCF && ('haplotypecaller' in tools) || (params.noGVCF && ('mutect2' in tools)) ) {
+// if (params.noGVCF && ('haplotypecaller' in tools) || (params.noGVCF && ('mutect2' in tools)) ) {
+//     vcfConcatenatedForVEP.map {
+//         variantCaller, idPatient, idSample, vcf, tbi ->
+//         [variantcaller, idSample, vcf]
+//         }.into {vcfConcatenatedVEP}
+// }
+// else {
+//     vcfConcatenatedForVEP.close()
+// }
+
+vcfKeep = Channel.empty().mix(
     vcfConcatenatedForVEP.map {
         variantCaller, idPatient, idSample, vcf, tbi ->
         [variantcaller, idSample, vcf]
-        }
-}
-else {
-    vcfConcatenatedForVEP.close()
-}
-
-vcfKeep = Channel.empty().mix(
-    vcfConcatenatedForVEP,
+    },
     vcfSentieon.map {
         variantcaller, idPatient, idSample, vcf, tbi ->
         [variantcaller, idSample, vcf]
