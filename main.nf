@@ -1324,11 +1324,12 @@ process MergeBamRecal {
     """
 }
 
-// TODO: Bind this with HaplotypeCaller output and migrate process chuck after HaplotypeCasller + VEP
+// Initialise a channel to mock vep html report file
 Channel.fromPath(params.vepFile)
        .ifEmpty { exit 1, "--vepFile not specified or no file found at that destination with the suffix .html. Please make sure to provide the file path correctly}" }
        .set { vepGenomeChronicler }
 
+vepReportPGPUK = ('vep' in tools) ? vepReportForGenomeChronicler : vepGenomeChronicler
 
 // STEP 4.5.2: RUNNING GenomeChronicler FOR THE RECALIBRATED BAM FILES
 // TODO: Update this when there is a different VEP html report for each bam
@@ -1342,7 +1343,7 @@ process RunGenomeChronicler {
 
   input:
   file(bam) from bamGenomeChronicler
-  each file(vep) from vepGenomeChronicler
+  each file(vep) from vepReportPGPUK
 
   output:
   file("results_${bam.simpleName}") into chronicler_results
