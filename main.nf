@@ -2025,7 +2025,7 @@ process ConcatVCF {
     """
 }
 
-(vcfConcatenated, vcfConcatenatedForFilter) = vcfConcatenated.into(2)
+(vcfConcatenatedForVEP, vcfConcatenatedForFilter) = vcfConcatenated.into(2)
 vcfConcatenated = vcfConcatenated.dump(tag:'VCF')
 
 // STEP GATK MUTECT2.3 - GENERATING PILEUP SUMMARIES
@@ -2680,9 +2680,11 @@ controlFreecVizOut.dump(tag:'ControlFreecViz')
 //     [variantcaller, idSample, vcf]
 // },
 vcfKeep = Channel.empty().mix(
-    vcfHaplotypeCallerVEP.map {
-        variantcaller, idPatient, idSample, vcf, idx ->
+    if (params.noGVCF && ('haplotypecaller' in tools) || (params.noGVCF && ('mutect2' in tools)) ) {
+    vcfConcatenatedForVEP.map {
+        variantCaller, idPatient, idSample, vcf, tbi ->
         [variantcaller, idSample, vcf]
+        }
     },
     vcfSentieon.map {
         variantcaller, idPatient, idSample, vcf, tbi ->
@@ -2937,7 +2939,7 @@ process VEP {
 
     output:
         set variantCaller, idSample, file("${reducedVCF}_VEP.ann.vcf") into vepVCF
-        file("${reducedVCF}_VEP.summary.html") into vepReport
+        file("${reducedVCF}_VEP.summary.html") into (vepReport, vepReportForGenomeChronicler)
 
     when: 'vep' in tools
 
