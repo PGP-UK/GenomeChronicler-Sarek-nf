@@ -2678,7 +2678,8 @@ if (params.noGVCF && ('haplotypecaller' in tools) || (params.noGVCF && ('mutect2
         variantCaller, idPatient, idSample, vcf, tbi ->
         [variantcaller, idSample, vcf]
         }
-else
+}
+else {
     vcfConcatenatedForVEP.close()
 }
 
