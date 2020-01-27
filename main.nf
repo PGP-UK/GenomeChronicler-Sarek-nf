@@ -1324,43 +1324,6 @@ process MergeBamRecal {
     """
 }
 
-// Initialise a channel to mock vep html report file
-Channel.fromPath(params.vepFile)
-       .ifEmpty { exit 1, "--vepFile not specified or no file found at that destination with the suffix .html. Please make sure to provide the file path correctly}" }
-       .set { vepGenomeChronicler }
-
-// STEP 4.5.2: RUNNING GenomeChronicler FOR THE RECALIBRATED BAM FILES
-// TODO: Update this when there is a different VEP html report for each bam
-process RunGenomeChronicler {
-
-  label 'cpus_max'
-  label 'memory_max'
-
-  tag "$bam"
-  publishDir "$params.outdir/GenomeChronicler", mode: 'copy'
-
-  input:
-  file(bam) from bamGenomeChronicler
-  file(vep) from vepReportForGenomeChronicler
-
-  output:
-  file("results_${bam.simpleName}") into chronicler_results
-
-  when: 'genomechronicler' in tools
-
-  script:
-  
-  optional_argument = vep.endsWith("no_vepFile.txt") ? '' : "--vepFile ${vep}"
-
-  """
-  genomechronicler \
-  --resultsDir '/GenomeChronicler' \
-  --bamFile $bam $optional_argument &> STDERR.txt
-  cp -r /GenomeChronicler/results/results_${bam.simpleName} .
-  mv STDERR.txt results_${bam.simpleName}/
-  """
-}
-
 // STEP 4.5': INDEXING THE RECALIBRATED BAM FILES
 
 process IndexBamRecal {
@@ -1901,7 +1864,6 @@ vcfFreeBayes = vcfFreeBayes.groupTuple(by:[0,1,2])
 process Mutect2 {
     tag {idSampleTumor + "_vs_" + idSampleNormal + "-" + intervalBed.baseName}
 
-    label 'forks_max'
     label 'cpus_1'
 
 
@@ -3040,8 +3002,6 @@ process VEPmerge {
 }
 
 vepReportMerge = vepReportMerge.dump(tag:'VEP')
-(vepReportForGenomeChronicler , vepReportForGenomeChronicler_inspect) = vepReport.into(2)
-vepReportForGenomeChronicler_inspect.view()
 
 vcfCompressVCFvep = vepVCF.mix(vepVCFmerge)
 
@@ -3066,6 +3026,46 @@ process CompressVCFvep {
 }
 
 compressVCFOutVEP = compressVCFOutVEP.dump(tag:'VCF')
+
+// STEP GENOMECHRONICLER
+
+// Initialise a channel to mock vep html report file
+Channel.fromPath(params.vepFile)
+       .ifEmpty { exit 1, "--vepFile not specified or no file found at that destination with the suffix .html. Please make sure to provide the file path correctly}" }
+       .set { vepGenomeChronicler }
+
+// STEP 4.5.2: RUNNING GenomeChronicler FOR THE RECALIBRATED BAM FILES
+// TODO: Update this when there is a different VEP html report for each bam
+process RunGenomeChronicler {
+
+  label 'cpus_max'
+  label 'memory_max'
+  label 'GenomeChronicler'
+
+  tag "$bam"
+  publishDir "$params.outdir/GenomeChronicler", mode: 'copy'
+
+  input:
+  file(bam) from bamGenomeChronicler
+  file(vep) from vepReport
+
+  output:
+  file("results_${bam.simpleName}") into chronicler_results
+
+  when: 'genomechronicler' in tools
+
+  script:
+  
+  optional_argument = vep.endsWith("no_vepFile.txt") ? '' : "--vepFile ${vep}"
+
+  """
+  genomechronicler \
+  --resultsDir '/GenomeChronicler' \
+  --bamFile $bam $optional_argument &> STDERR.txt
+  cp -r /GenomeChronicler/results/results_${bam.simpleName} .
+  mv STDERR.txt results_${bam.simpleName}/
+  """
+}
 
 /*
 ================================================================================
@@ -3542,3 +3542,4 @@ def returnStatus(it) {
     if (!(it in [0, 1])) exit 1, "Status is not recognized in TSV file: ${it}, see --help for more information"
     return it
 }
+
