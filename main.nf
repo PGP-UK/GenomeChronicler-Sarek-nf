@@ -425,6 +425,7 @@ process BuildBWAindexes {
 ch_bwaIndex = params.bwaIndex ? Channel.value(file(params.bwaIndex)) : bwaIndexes
 
 process BuildDict {
+    label 'cpus_1'
     tag {fasta}
 
     publishDir params.outdir, mode: params.publishDirMode,
@@ -800,6 +801,9 @@ process MapReads {
     bwa_cpus  = !params.bwa_cpus_fraction ? task.cpus : Math.floor ( params.bwa_cpus_fraction * task.cpus) as Integer
     sort_cpus = !params.bwa_cpus_fraction ? task.cpus : task.cpus - bwa_cpus
     """
+    echo 'bwa_cpus:'  ${bwa_cpus}
+    echo 'sort_cpus:' ${sort_cpus}
+
         ${convertToFastq}
         bwa mem -k 23 -K 100000000 -R \"${readGroup}\" ${extra} -t ${bwa_cpus} -M ${fasta} \
         ${input} | \
@@ -1053,7 +1057,7 @@ process SentieonDedup {
 // STEP 3: CREATING RECALIBRATION TABLES
 
 process BaseRecalibrator {
-    label 'med_resources'
+    label 'cpus_1'
 
     tag {idPatient + "-" + idSample + "-" + intervalBed.baseName}
 
@@ -1105,8 +1109,8 @@ if (params.no_intervals) {
 // STEP 3.5: MERGING RECALIBRATION TABLES
 
 process GatherBQSRReports {
-    label 'memory_singleCPU_2_task'
-    label 'cpus_2'
+
+    label 'cpus_1'
 
     tag {idPatient + "-" + idSample}
 
@@ -1174,8 +1178,7 @@ bamApplyBQSR = bamApplyBQSR.dump(tag:'BAM + BAI + RECAL TABLE + INT')
 
 process ApplyBQSR {
 
-    label 'memory_singleCPU_2_task'
-    label 'cpus_2'
+    label 'cpus_1'
 
     tag {idPatient + "-" + idSample + "-" + intervalBed.baseName}
 
@@ -1296,7 +1299,8 @@ bamRecalSentieonSampleTSV
 // STEP 4.5.1: MERGING THE RECALIBRATED BAM FILES
 
 process MergeBamRecal {
-    label 'med_resources'
+    label 'cpus_max'
+    label 'memory_max'
 
     tag {idPatient + "-" + idSample}
 
@@ -1319,7 +1323,6 @@ process MergeBamRecal {
     samtools index ${idSample}.recal.bam
     """
 }
-bamGenomeChroniclerToPrint.view()
 
 // TODO: Bind this with HaplotypeCaller output and migrate process chuck after HaplotypeCasller + VEP
 Channel.fromPath(params.vepFile)
@@ -1415,7 +1418,7 @@ bamRecalSampleTSV
 // STEP 5: QC
 
 process SamtoolsStats {
-    label 'cpus_2'
+    label 'cpus_1'
 
     tag {idPatient + "-" + idSample}
 
@@ -1440,8 +1443,7 @@ samtoolsStatsReport = samtoolsStatsReport.dump(tag:'SAMTools')
 bamBamQC = bamMappedBamQC.mix(bamRecalBamQC)
 
 process BamQC {
-    label 'memory_max'
-    label 'cpus_max'
+    label 'med_resources'
 
     tag {idPatient + "-" + idSample}
 
@@ -1506,28 +1508,34 @@ bamHaplotypeCaller = bamRecalAllTemp.combine(intHaplotypeCaller)
 
 // STEP GATK HAPLOTYPECALLER.1
 
+// TODO: The channel name gvcfHaplotypeCaller could be more general -=g
+// COMMENT: There param -ERC GVCF is not optional, hence there will always be g.vcf files
 process HaplotypeCaller {
-
-    label 'forks_max'
-    label 'cpus_1'
 
     tag {idSample + "-" + intervalBed.baseName}
 
     input:
         set idPatient, idSample, file(bam), file(bai), file(intervalBed) from bamHaplotypeCaller
-        file(dbsnp) from ch_dbsnp
-        file(dbsnpIndex) from ch_dbsnpIndex
-        file(dict) from ch_dict
-        file(fasta) from ch_fasta
-        file(fastaFai) from ch_fastaFai
+        each file(dbsnp) from ch_dbsnp
+        each file(dbsnpIndex) from ch_dbsnpIndex
+        each file(dict) from ch_dict
+        each file(fasta) from ch_fasta
+        each file(fastaFai) from ch_fastaFai
 
     output:
-        set val("HaplotypeCallerGVCF"), idPatient, idSample, file("${intervalBed.baseName}_${idSample}.g.vcf") into gvcfHaplotypeCaller
-        set idPatient, idSample, file(intervalBed), file("${intervalBed.baseName}_${idSample}.g.vcf") into gvcfGenotypeGVCFs
+    // WIP: Remove after  testing
+        set val("HaplotypeCaller${gvcf_tag}"), idPatient, idSample, file(outputVcf), file("${outputVcf}.idx") into vcfHaplotypeCallerVEP
+        set val("HaplotypeCaller${gvcf_tag}"), idPatient, idSample, file(outputVcf) into gvcfHaplotypeCaller
+        set idPatient, idSample, file(intervalBed), file(outputVcf) into gvcfGenotypeGVCFs
 
     when: 'haplotypecaller' in tools
 
     script:
+    name = "${intervalBed.baseName}_${idSample}"
+    output_suffix = params.noGVCF ? '.vcf' : '.g.vcf'
+    outputVcf = name + output_suffix
+    gvcf_arg = params.noGVCF ? '' : '-ERC GVCF'
+    gvcf_tag = params.noGVCF ? '' : 'GVCF'
     """
     gatk --java-options "-Xmx${task.memory.toGiga()}g -Xms6000m -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10" \
         HaplotypeCaller \
@@ -1535,15 +1543,21 @@ process HaplotypeCaller {
         -I ${bam} \
         -L ${intervalBed} \
         -D ${dbsnp} \
-        -O ${intervalBed.baseName}_${idSample}.g.vcf \
-        -ERC GVCF
+        -O ${outputVcf} \
+        ${gvcf_arg}
     """
 }
 
-gvcfHaplotypeCaller = gvcfHaplotypeCaller.groupTuple(by:[0, 1, 2])
+if (params.noGVCF) {
+    gvcfHaplotypeCaller = gvcfHaplotypeCaller.groupTuple(by:[0, 1, 2])
+    gvcfHaplotypeCaller = gvcfHaplotypeCaller.dump(tag:'noGVCF HaplotypeCaller')
+    }
 
-if (params.noGVCF) gvcfHaplotypeCaller.close()
-else gvcfHaplotypeCaller = gvcfHaplotypeCaller.dump(tag:'GVCF HaplotypeCaller')
+// If noGVCF flag is provided, GenotypeGVCFs shoyld not be executed
+// We achieve this by close()-ing the GenotypeGVCFs input data channel 
+// Also with the explicit statement: "when: !(params.noGVCF) && ('haplotypecaller' in tools)" (see 'GenotypeGVCFs' process)
+if (params.noGVCF) gvcfGenotypeGVCFs.close()
+
 
 // STEP GATK HAPLOTYPECALLER.2
 
@@ -1561,7 +1575,7 @@ process GenotypeGVCFs {
     output:
     set val("HaplotypeCaller"), idPatient, idSample, file("${intervalBed.baseName}_${idSample}.vcf") into vcfGenotypeGVCFs
 
-    when: 'haplotypecaller' in tools
+    when: !(params.noGVCF) && ('haplotypecaller' in tools)
 
     script:
     // Using -L is important for speed and we have to index the interval files also
@@ -1849,7 +1863,6 @@ bamMpileup = bamMpileup.spread(intMpileup)
 
 process FreeBayes {
 
-    label 'forks_max'
     label 'cpus_1'
 
     tag {idSampleTumor + "_vs_" + idSampleNormal + "-" + intervalBed.baseName}
@@ -1981,7 +1994,8 @@ vcfConcatenateVCFs = mutect2Output.mix(vcfFreeBayes, vcfGenotypeGVCFs, gvcfHaplo
 vcfConcatenateVCFs = vcfConcatenateVCFs.dump(tag:'VCF to merge')
 
 process ConcatVCF {
-    label 'med_resources'
+    label 'max_cpus'
+    label 'max_memory'
 
     tag {variantCaller + "-" + idSample}
 
@@ -2019,7 +2033,6 @@ vcfConcatenated = vcfConcatenated.dump(tag:'VCF')
 process PileupSummariesForMutect2 {
     tag {idSampleTumor + "_vs_" + idSampleNormal + "_" + intervalBed.baseName }
 
-    label 'forks_max'
     label 'cpus_1'
 
     input:
@@ -2052,7 +2065,6 @@ pileupSummaries = pileupSummaries.groupTuple(by:[0,1])
 
 process MergePileupSummaries {
 
-    label 'forks_max'
     label 'cpus_1'
 
     tag {idPatient + "_" + idSampleTumor}
@@ -2082,7 +2094,6 @@ process MergePileupSummaries {
 
 process CalculateContamination {
 
-    label 'forks_max'
     label 'cpus_1'
 
     tag {idSampleTumor + "_vs_" + idSampleNormal}
@@ -2112,7 +2123,6 @@ process CalculateContamination {
 
 process FilterMutect2Calls {
 
-    label 'forks_max'
     label 'cpus_1'
 
     tag {idSampleTN}
@@ -2388,7 +2398,7 @@ vcfStrelkaBP = vcfStrelkaBP.dump(tag:'Strelka BP')
 // Run commands and code from Malin Larsson
 // Based on Jesper Eisfeldt's code
 process AlleleCounter {
-    label 'memory_singleCPU_2_task'
+    label 'cpus_2'
 
     tag {idSample}
 
@@ -2433,7 +2443,7 @@ alleleCounterOut = alleleCounterOut.map {
 // R script from Malin Larssons bitbucket repo:
 // https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
 process ConvertAlleleCounts {
-    label 'memory_singleCPU_2_task'
+    label 'cpus_2'
 
     tag {idSampleTumor + "_vs_" + idSampleNormal}
 
@@ -2459,7 +2469,7 @@ process ConvertAlleleCounts {
 // R scripts from Malin Larssons bitbucket repo:
 // https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
 process Ascat {
-    label 'memory_singleCPU_2_task'
+    label 'cpus_2'
 
     tag {idSampleTumor + "_vs_" + idSampleNormal}
 
@@ -2487,7 +2497,7 @@ ascatOut.dump(tag:'ASCAT')
 // STEP MPILEUP.1
 
 process Mpileup {
-    label 'memory_singleCPU_2_task'
+    label 'cpus_2'
 
     tag {idSample + "-" + intervalBed.baseName}
 
@@ -2567,7 +2577,7 @@ mpileupOut = mpileupOut.map {
 // STEP CONTROLFREEC.1 - CONTROLFREEC
 
 process ControlFREEC {
-    label 'memory_singleCPU_2_task'
+    label 'cpus_2'
 
     tag {idSampleTumor + "_vs_" + idSampleNormal}
 
@@ -2631,7 +2641,7 @@ controlFreecOut.dump(tag:'ControlFREEC')
 // STEP CONTROLFREEC.3 - VISUALIZATION
 
 process ControlFreecViz {
-    label 'memory_singleCPU_2_task'
+    label 'cpus_2'
 
     tag {idSampleTumor + "_vs_" + idSampleNormal}
 
@@ -2658,12 +2668,22 @@ process ControlFreecViz {
 controlFreecVizOut.dump(tag:'ControlFreecViz')
 
 // Remapping channels for QC and annotation
-
+// Where is HaplotypeCaller and Mutect here?
 (vcfStrelkaIndels, vcfStrelkaSNVS) = vcfStrelka.into(2)
 (vcfStrelkaBPIndels, vcfStrelkaBPSNVS) = vcfStrelkaBP.into(2)
 (vcfMantaSomaticSV, vcfMantaDiploidSV) = vcfManta.into(2)
 
+// WIP redundant, but keep until tested:
+//
+// vcfHaplotypeCallerVEP.map {
+//     variantcaller, idPatient, idSample, vcf ->
+//     [variantcaller, idSample, vcf]
+// },
 vcfKeep = Channel.empty().mix(
+    vcfHaplotypeCallerVEP.map {
+        variantcaller, idPatient, idSample, vcf, idx ->
+        [variantcaller, idSample, vcf]
+    },
     vcfSentieon.map {
         variantcaller, idPatient, idSample, vcf, tbi ->
         [variantcaller, idSample, vcf]
@@ -2711,7 +2731,6 @@ vcfKeep = Channel.empty().mix(
 
 process BcftoolsStats {
 
-    label 'forks_max'
     label 'cpus_1'
 
     tag {"${variantCaller} - ${vcf}"}
@@ -2736,7 +2755,6 @@ bcftoolsReport = bcftoolsReport.dump(tag:'BCFTools')
 
 process Vcftools {
 
-    label 'forks_max'
     label 'cpus_1'
 
     tag {"${variantCaller} - ${vcf}"}
@@ -3055,8 +3073,7 @@ compressVCFOutVEP = compressVCFOutVEP.dump(tag:'VCF')
 
 process MultiQC {
 
-    label 'cpus_max'
-    label 'memory_max'
+    label 'cpus_2'
 
     publishDir "${params.outdir}/MultiQC", mode: params.publishDirMode
 
