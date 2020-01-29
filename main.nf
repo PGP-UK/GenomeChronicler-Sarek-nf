@@ -2872,6 +2872,7 @@ process VEP {
     label 'cpus_max'
     label 'memory_max'
 
+
     echo true
     tag {"${idSample} - ${variantCaller} - ${vcf}"}
 
