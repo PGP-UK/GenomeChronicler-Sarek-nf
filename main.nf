@@ -1485,7 +1485,7 @@ process HaplotypeCaller {
     // WIP: Remove after  testing
         set val("HaplotypeCaller${gvcf_tag}"), idPatient, idSample, file(outputVcf), file("${outputVcf}.idx") into vcfHaplotypeCallerVEP
         set val("HaplotypeCaller${gvcf_tag}"), idPatient, idSample, file(outputVcf) into gvcfHaplotypeCaller
-        set idPatient, idSample, file(intervalBed), file(outputVcf) into gvcfGenotypeGVCFs
+        set idPatient, idSample, file(intervalBed), file(outputVcf) into gvcfCFs
 
     when: 'haplotypecaller' in tools
 
@@ -1512,8 +1512,8 @@ if (params.noGVCF) {
     gvcfHaplotypeCaller = gvcfHaplotypeCaller.dump(tag:'noGVCF HaplotypeCaller')
     }
 
-// If noGVCF flag is provided, GenotypeGVCFs shoyld not be executed
-// We achieve this by close()-ing the GenotypeGVCFs input data channel 
+// If noGVCF flag is provided, CFs shoyld not be executed
+// We achieve this by close()-ing the CFs input data channel 
 // Also with the explicit statement: "when: !(params.noGVCF) && ('haplotypecaller' in tools)" (see 'GenotypeGVCFs' process)
 if (params.noGVCF) gvcfGenotypeGVCFs.close()
 
@@ -1522,6 +1522,7 @@ if (params.noGVCF) gvcfGenotypeGVCFs.close()
 
 process GenotypeGVCFs {
     tag {idSample + "-" + intervalBed.baseName}
+    label 'cpus_2'
 
     input:
         set idPatient, idSample, file(intervalBed), file(gvcf) from gvcfGenotypeGVCFs
