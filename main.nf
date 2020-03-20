@@ -1485,7 +1485,7 @@ process HaplotypeCaller {
     // WIP: Remove after  testing
         set val("HaplotypeCaller${gvcf_tag}"), idPatient, idSample, file(outputVcf), file("${outputVcf}.idx") into vcfHaplotypeCallerVEP
         set val("HaplotypeCaller${gvcf_tag}"), idPatient, idSample, file(outputVcf) into gvcfHaplotypeCaller
-        set idPatient, idSample, file(intervalBed), file(outputVcf) into gvcfCFs
+        set idPatient, idSample, file(intervalBed), file(outputVcf) into gvcfGenotypeGVCFs
 
     when: 'haplotypecaller' in tools
 
